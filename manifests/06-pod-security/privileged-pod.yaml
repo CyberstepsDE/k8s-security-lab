@@ -1,0 +1,21 @@
+# The same technique used later in the RBAC escalation chain, deployed directly
+# here for the standalone "how dangerous IS privileged, really" demo.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dangerous-pod
+  namespace: default
+spec:
+  containers:
+    - name: app
+      image: alpine:3.20
+      command: ["sleep", "3600"]
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: hostroot
+          mountPath: /host
+  volumes:
+    - name: hostroot
+      hostPath:
+        path: /

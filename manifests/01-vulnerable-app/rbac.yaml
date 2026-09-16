@@ -1,0 +1,33 @@
+# The vulnerable app's ServiceAccount, over-permissioned the way a real one often is:
+# someone reused a CI/CD deploy identity (which legitimately needs to create Pods)
+# for a small internal web app that only ever needed to read its own ConfigMap.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webapp-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: webapp-sa-role
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: webapp-sa-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: webapp-sa-role
+subjects:
+  - kind: ServiceAccount
+    name: webapp-sa
+    namespace: default

@@ -1,0 +1,62 @@
+# Local stand-in for the real Azure Instance Metadata Service (169.254.169.254),
+# which only exists on an actual Azure VM/AKS node and can't be reached from minikube.
+# Simulates the same response shape so the "Demo: Secret Hunting & IMDS" curl command
+# behaves identically here and on real AKS - just point at a different host.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mock-imds-content
+  namespace: default
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location /metadata/instance {
+        default_type application/json;
+        return 200 '{"compute":{"azEnvironment":"AzurePublicCloud","location":"westeurope","name":"aks-nodepool1-vm000000","resourceGroupName":"kubernetes-goat-rg","subscriptionId":"11111111-2222-3333-4444-555555555555","vmId":"66666666-7777-8888-9999-000000000000"},"network":{}}';
+      }
+      location /metadata/identity/oauth2/token {
+        default_type application/json;
+        return 200 '{"access_token":"FAKE.DEMO.TOKEN.NOT-REAL-DO-NOT-USE","client_id":"11111111-2222-3333-4444-555555555555","expires_in":"3599","resource":"https://management.azure.com/","token_type":"Bearer"}';
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-azure-imds
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-azure-imds
+  template:
+    metadata:
+      labels:
+        app: mock-azure-imds
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: conf
+          configMap:
+            name: mock-imds-content
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-azure-imds
+  namespace: default
+spec:
+  selector:
+    app: mock-azure-imds
+  ports:
+    - port: 80
+      targetPort: 80
