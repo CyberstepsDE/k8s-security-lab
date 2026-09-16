@@ -1,7 +1,7 @@
 # Kubernetes Security
 ### Module 3 Week 5 Session 3
 
-**Lab repo**: github.com/roman-cybersteps/k8s-security-lab
+**Lab repo**: github.com/CyberstepsDE/k8s-security-lab
 
 ---
 
@@ -84,7 +84,7 @@ This is the roadmap for today's lab. Every step below is one of these questions,
 
 ## Live Lab: The Cluster Health Dashboard
 
-Repo: `github.com/roman-cybersteps/k8s-security-lab` — run `./setup.sh`, then:
+Repo: `github.com/CyberstepsDE/k8s-security-lab` — run `./setup.sh`, then:
 
 ```bash
 kubectl port-forward svc/cluster-health-dashboard 5000:5000 -n default
@@ -430,6 +430,6 @@ It flagged the **exact same plaintext secret** from the pop quiz, and the **exac
 # Kubernetes Security
 ### Module 3 Week 5 Session 3
 
-Lab repo: **github.com/roman-cybersteps/k8s-security-lab**
+Lab repo: **github.com/CyberstepsDE/k8s-security-lab**
 
 Thanks, and enjoy the practice!

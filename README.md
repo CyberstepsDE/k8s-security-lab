@@ -26,7 +26,7 @@ for the tested output alongside each step.
 ## Quick start
 
 ```bash
-git clone https://github.com/roman-cybersteps/k8s-security-lab.git
+git clone https://github.com/CyberstepsDE/k8s-security-lab.git
 cd k8s-security-lab
 ./setup.sh
 ```
