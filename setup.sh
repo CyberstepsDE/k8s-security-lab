@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Kubernetes Security Lab - full environment setup.
-# Tested on: minikube v1.37.0, Docker driver, macOS arm64, kubectl v1.35.
+# Tested on: minikube v1.37.0, Docker driver, macOS arm64 and Kali Linux VM, kubectl v1.35.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "==> Starting minikube with Calico CNI (needed so NetworkPolicy is actually enforced)"
-minikube start --cni=calico --cpus=4 --memory=6000
+minikube start --driver=docker --cni=calico --cpus=4 --memory=3072
 
-echo "==> Building the vulnerable app image directly into minikube's Docker daemon"
-eval "$(minikube docker-env)"
-docker build -t k8s-security-lab/vulnerable-app:latest ./app
+echo "==> Building the vulnerable app image for Minikube"
+minikube image build -t k8s-security-lab/vulnerable-app:latest ./app
 
 echo "==> [01] Deploying the vulnerable app (this is the lab's entry point)"
 kubectl apply -f manifests/01-vulnerable-app/rbac.yaml

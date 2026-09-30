@@ -21,7 +21,10 @@ below includes the tested output alongside each step.
 
 - Docker (daemon running)
 - `minikube`, `kubectl`
-- `kubescape` (`brew install kubescape`) — only needed for the static-analysis demo
+- `kubescape` — needed for the static-analysis demo; **install before class**:
+  - macOS: `brew install kubescape`
+  - Linux / Kali VM: `curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash`
+  - verify: `kubescape version`
 
 ## Quick start
 
@@ -32,7 +35,7 @@ cd k8s-security-lab
 ```
 
 This starts a minikube cluster (with Calico, so NetworkPolicy actually works), builds the
-vulnerable app image directly into minikube's Docker daemon, and deploys every demo's
+vulnerable app image with `minikube image build`, and deploys every demo's
 baseline state — tested end to end from a clean `minikube delete` before shipping.
 
 Then start the attack walkthrough:
