@@ -51,6 +51,38 @@ When you're done:
 ./teardown.sh
 ```
 
+On Windows, see [Windows (PowerShell)](#windows-powershell) below.
+
+## Windows (PowerShell)
+
+Everything above runs on Windows too. Use **PowerShell 7** (`pwsh`), not the older
+Windows PowerShell 5.1: 5.1 maps `curl` to `Invoke-WebRequest` and drops the inner quotes
+of the attack commands.
+
+- Install the tools: `winget install Microsoft.PowerShell`, `winget install Kubernetes.minikube`,
+  `winget install Kubernetes.kubectl`, `winget install kubescape.kubescape` (Docker Desktop must be running).
+  Open a new terminal afterwards so the tools are found.
+- Start and stop the lab with the PowerShell scripts instead of the `.sh` ones:
+
+```powershell
+git clone https://github.com/CyberstepsDE/k8s-security-lab.git
+cd k8s-security-lab
+pwsh -ExecutionPolicy Bypass -File .\setup.ps1
+kubectl port-forward svc/cluster-health-dashboard 5000:5000 -n default
+# open http://localhost:5000 in your browser
+pwsh -ExecutionPolicy Bypass -File .\teardown.ps1
+```
+
+- In `pwsh`, the `curl ... --data-urlencode` attack commands work as written. A command
+  that is split with `\` at the line end goes on one line (or use a backtick `` ` `` instead).
+- The few commands that use bash syntax on your own machine:
+
+| Bash | PowerShell 7 |
+| --- | --- |
+| `... -o jsonpath='{.data.password}' --as=... \| base64 -d` | `$p = kubectl get secret db-credentials -n database -o jsonpath='{.data.password}' --as=system:serviceaccount:default:app-sa; [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p))` |
+| `POD1=$(kubectl -n tenant-1 get pod ...)` | `$POD1 = kubectl -n tenant-1 get pod -l app=nginx -o jsonpath='{.items[0].metadata.name}'` |
+| `open http://localhost:5000` | `Start-Process http://localhost:5000` |
+
 ## The main attack chain (start here)
 
 The "Cluster Health Dashboard" at `http://localhost:5000` is a fake internal diagnostics
